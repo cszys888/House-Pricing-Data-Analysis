@@ -1,0 +1,14 @@
+box: merliseclyde/predictive-modeling-bart
+
+build:
+  steps:
+    - script:
+      name: Setup
+      code: |
+          apt-get install libsasl2-dev
+          install2.r mongolite
+    - script:
+      name: Update scores
+      code: |
+          wget --quiet "http://www.stat.duke.edu/courses/Spring17/sta521/knitr/Final_Project/Final_Scoring.R"
+          Rscript Final_Scoring.R $TEAM $MONGO_URL $PP_URL

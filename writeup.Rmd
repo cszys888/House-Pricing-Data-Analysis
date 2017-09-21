@@ -1,0 +1,656 @@
+---
+title: "Write Up"
+author: "Yasong Zhou, Xichu Liu, Shaoji Li, Zhanhan Yu"
+date: "4/27/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+#1. Exploratory data analysis (20 points): must include three correctly labeled graphs and an explanation that highlight the most important features that went into your model building.
+
+##1.1 Variables Transformation
+
+- At the first glance of quantitive variables, we find some potential nonlinearity in `price`, `TotalSq`, and `Lot.Area` etc. 
+
+- Figure 1.1 shows the scatterplots of `price`,`TotalSq`,`Garage.Area`,`Lot.Area` and `Year.Build`. Figure 1.1 implies nonlinearity problem may exsits in variables `TotalSq`,`Lot.Area`, and`price`.  Also, there may be some outliers exists in variable `Lot.Area` as shown in the third plot of Figure 1.1. But our intuition tells us that these three variables could be relative to house price. For example, total square of house and the year which the house built could definitely influence the house value. Taking into account the nonlinearity existing in the potential predictors, we consider using nonliear model to capture these features or we could transform these variables to alleviate the nonlinearity problem. As can be seen in the figure 1.2, the nonlinearity problem is alleviated after transformation.
+
+
+```{r}
+load("ames_train.Rdata")
+par(mfrow = c(2,2),oma=c(0,0,2,0))
+plot(ames_train$TotalSq, ames_train$price,xlab="TotalSq",ylab="price")
+plot(ames_train$Year.Built, ames_train$price,xlab="Year.Built",ylab="price")
+plot(ames_train$Lot.Area, ames_train$price,xlab="Lot.Area",ylab="price")
+plot(ames_train$Garage.Area, ames_train$price,xlab="Garage.Area",ylab="price")
+title("Figure 1.1 Scatterplots (before transformation", outer=TRUE)
+```
+```{r}
+par(mfrow = c(2,2),oma=c(0,0,2,0))
+plot(log(ames_train$TotalSq), log(ames_train$price),xlab="log(TotalSq)",ylab="log(price)")
+plot(log(ames_train$Year.Built), log(ames_train$price),xlab="log(Year.Built)",ylab="log(price)")
+plot(log(ames_train$Lot.Area), log(ames_train$price),xlab="loh(Lot.Area)",ylab="log(price)")
+plot(log(ames_train$Garage.Area), log(ames_train$price),xlab="log(Garage.Area)",ylab="log(price)")
+title("Figure 1.2 Scatterplots (after transformation", outer=TRUE)
+```
+
+##1.2 Inbalanced Factor Level and Missing Value
+
+- Some qualitative variables contain a level named "NA" which do not represent missing data. For example, in variable `Bsmt.Cond`, NA means "No Basement" and in variable `Alley`, NA is "No alley access". In this case, we replace NA with a new level to avoid unnecessary confusion. For example, we change the new level "No basement" in the variable `Bsmt.Qual` to replace with "NA".
+
+- Moreover, some quantitive variables, such as `Mas.Vnr.Area`, and `Lot.Frontage` contain missing value. We couldn't claim that those missing data are at random. Simply excluding these missing data is reckless. Therefore, we use information from related observations or using mean imputation method to handle with missing data.
+
+- We also find that the factor levels are not consistent among the training data, testing data and validation data. This issue prevents us from conducting prediction and model test. To figure out this issue, we do the imputation based on logical rules. For example, in the training and testing data set, level "Ex" is not included in the variable `Bsmt.Qual`, but it exist in validation data set. We merge levels "Ex" (Excellent) and "Gd" (Good) by replacing "Ex" with "Gd"("Good").
+
+```{r, message=FALSE}
+suppressMessages(library(dplyr))
+load("ames_train.Rdata")
+
+levels(ames_train$Bsmt.Cond) = c(levels(ames_train$Bsmt.Cond)[-1], "No Basement")
+ames_train$Bsmt.Cond[is.na(ames_train$Bsmt.Cond)] = "No Basement"
+levels(ames_train$Bsmt.Exposure) = c(levels(ames_train$Bsmt.Exposure)[-1], "No Basement")
+ames_train$Bsmt.Exposure[is.na(ames_train$Bsmt.Exposure)] = "No Basement"
+levels(ames_train$Bsmt.Qual) = c(levels(ames_train$Bsmt.Qual)[-1], "No Basement")
+ames_train$Bsmt.Qual[is.na(ames_train$Bsmt.Qual)] = "No Basement"
+levels(ames_train$BsmtFin.Type.1) = c(levels(ames_train$BsmtFin.Type.1)[-1], "No Basement")
+ames_train$BsmtFin.Type.1[is.na(ames_train$BsmtFin.Type.1)] = "No Basement"
+levels(ames_train$BsmtFin.Type.2) = c(levels(ames_train$BsmtFin.Type.2)[-1], "No Basement")
+ames_train$BsmtFin.Type.2[is.na(ames_train$BsmtFin.Type.2)] = "No Basement"
+
+levels(ames_train$Alley) = c(levels(ames_train$Alley)[-1], "No alley access")
+ames_train$Alley[is.na(ames_train$Alley)] = "No alley access"
+levels(ames_train$Fireplace.Qu) = c(levels(ames_train$Fireplace.Qu)[-1], "No Fireplace")
+ames_train$Fireplace.Qu[is.na(ames_train$Fireplace.Qu)] = "No Fireplace"
+levels(ames_train$Garage.Type) = c(levels(ames_train$Garage.Type)[-1], "No Garage")
+ames_train$Garage.Type[is.na(ames_train$Garage.Type)] = "No Garage"
+levels(ames_train$Garage.Finish) = c(levels(ames_train$Garage.Finish)[-1], "No Garage")
+ames_train$Garage.Finish[is.na(ames_train$Garage.Finish)] = "No Garage"
+
+levels(ames_train$Garage.Qual) = c("Po","Fa","TA","Gd","Ex", "No Garage")
+ames_train$Garage.Qual[is.na(ames_train$Garage.Qual)] = "No Garage"
+levels(ames_train$Garage.Cond) = c(levels(ames_train$Garage.Cond)[-1], "No Garage")
+ames_train$Garage.Cond[is.na(ames_train$Garage.Cond)] = "No Garage"
+levels(ames_train$Pool.QC) = c(levels(ames_train$Pool.QC)[-1], "No Pool")
+ames_train$Pool.QC[is.na(ames_train$Pool.QC)] = "No Pool"
+
+levels(ames_train$Fence) = c(levels(ames_train$Fence)[-1], "No Fence")
+ames_train$Fence[is.na(ames_train$Fence)] = "No Fence"
+levels(ames_train$Misc.Feature) = c("None", levels(ames_train$Misc.Feature)[-1])
+ames_train$Misc.Feature[is.na(ames_train$Misc.Feature)] = "None"
+
+levels(ames_train$Garage.Yr.Blt) = c(levels(ames_train$Garage.Yr.Blt)[-1], "No Garage Year")
+ames_train$Garage.Yr.Blt[is.na(ames_train$Garage.Yr.Blt)] = mean(ames_train$Garage.Yr.Blt[!is.na(ames_train$Garage.Yr.Blt)])
+
+ames_train= ames_train %>%
+  mutate(MS.SubClass = as.factor(MS.SubClass))
+ames_train_new = ames_train%>% na.omit()
+
+load("ames_test.Rdata")
+ames_test$Lot.Frontage[is.na(ames_test$Lot.Frontage)]= 21 # mean of variables
+ames_test$Mas.Vnr.Area[is.na(ames_test$Mas.Vnr.Area)]= 0
+ames_test$Garage.Yr.Blt[is.na(ames_test$Garage.Yr.Blt)]= 1895
+
+levels(ames_test$Bsmt.Cond) = c(levels(ames_test$Bsmt.Cond)[-1], "No Basement")
+ames_test$Bsmt.Cond[is.na(ames_test$Bsmt.Cond)] = "No Basement"
+levels(ames_test$Bsmt.Exposure) = c(levels(ames_test$Bsmt.Exposure)[-1], "No Basement")
+ames_test$Bsmt.Exposure[is.na(ames_test$Bsmt.Exposure)] = "No Basement"
+levels(ames_test$Bsmt.Qual) = c(levels(ames_test$Bsmt.Qual)[-1], "No Basement")
+ames_test$Bsmt.Qual[is.na(ames_test$Bsmt.Qual)] = "No Basement"
+levels(ames_test$BsmtFin.Type.1) = c(levels(ames_test$BsmtFin.Type.1)[-1], "No Basement")
+ames_test$BsmtFin.Type.1[is.na(ames_test$BsmtFin.Type.1)] = "No Basement"
+levels(ames_test$BsmtFin.Type.2) = c(levels(ames_test$BsmtFin.Type.2)[-1], "No Basement")
+ames_test$BsmtFin.Type.2[is.na(ames_test$BsmtFin.Type.2)] = "No Basement"
+
+levels(ames_test$Alley) = c(levels(ames_test$Alley)[-1], "No alley access")
+ames_test$Alley[is.na(ames_test$Alley)] = "No alley access"
+levels(ames_test$Fireplace.Qu) = c(levels(ames_test$Fireplace.Qu)[-1], "No Fireplace")
+ames_test$Fireplace.Qu[is.na(ames_test$Fireplace.Qu)] = "No Fireplace"
+levels(ames_test$Garage.Type) = c(levels(ames_test$Garage.Type)[-1], "No Garage")
+ames_test$Garage.Type[is.na(ames_test$Garage.Type)] = "No Garage"
+levels(ames_test$Garage.Finish) = c(levels(ames_test$Garage.Finish)[-1], "No Garage")
+ames_test$Garage.Finish[is.na(ames_test$Garage.Finish)] = "No Garage"
+
+levels(ames_test$Garage.Qual) = c("Po","Fa","TA","Gd","Ex", "No Garage")
+ames_test$Garage.Qual[is.na(ames_test$Garage.Qual)] = "No Garage"
+levels(ames_test$Garage.Cond) = c(levels(ames_test$Garage.Cond)[-1], "No Garage")
+ames_test$Garage.Cond[is.na(ames_test$Garage.Cond)] = "No Garage"
+levels(ames_test$Pool.QC) = c(levels(ames_test$Pool.QC)[-1], "No Pool")
+ames_test$Pool.QC[is.na(ames_test$Pool.QC)] = "No Pool"
+
+levels(ames_test$Fence) = c(levels(ames_test$Fence)[-1], "No Fence")
+ames_test$Fence[is.na(ames_test$Fence)] = "No Fence"
+levels(ames_test$Misc.Feature) = c("None", levels(ames_test$Misc.Feature)[-1])
+ames_test$Misc.Feature[is.na(ames_test$Misc.Feature)] = "None"
+
+levels(ames_test$Garage.Yr.Blt) = c("No Garage Year", levels(ames_test$Garage.Yr.Blt)[-1])
+ames_test$Garage.Yr.Blt[is.na(ames_test$Garage.Yr.Blt)] = mean(ames_test$Garage.Yr.Blt[!is.na(ames_test$Garage.Yr.Blt)])
+
+ames_test = ames_test %>%
+  mutate(MS.SubClass = as.factor(MS.SubClass))
+```
+
+##1.3 Multicollinearity
+
+- It is worth to notice that multicollinearity exists in the variables. For example, `Lot.Frontage` and `Lot.Area`, `TotalSq` and `X1st.Flr.SF`,`area` and `TotalSq`, and `Total.Bsmt.SF` and `TotalSq` have strong linear relationship as shown in Figure 2. It is not a wise choice to include variables which may cause multicollinearity problem in the model.
+
+```{r}
+par(mfrow = c(2,2),oma=c(0,0,2,0))
+attach(ames_train)
+plot(Lot.Area,Lot.Frontage)
+plot(TotalSq,X1st.Flr.SF)
+plot(area,TotalSq)
+plot(Total.Bsmt.SF,TotalSq)
+title("Figure 2. Multicollinearity between Variables", outer=TRUE)
+```
+
+##1.4 Variable Selection
+
+- After data cleaning, now we try to figure out which variables may be useful to predict house price. We use our intuition first, and then refer to Random Forest method to choose important variables.
+
+- Figure 3. presents the result of random forest, 30 of 80 variables are important variabels which may have power to explain `price`. Variables in the Figure 3. confirm our intuition. For example, total square of the dwelling (`TotalSq`), the community the house belonging to (`Neighborhood`), and the overall quality of the material and finish of the house (`Overall.Qual`) could be the most powerful predictors. The type of dwelling (`MS.Subclass`) is also a significant factor that affect the house price, thus affecting the house price.
+
+```{r}
+suppressMessages(library(randomForest))
+suppressMessages(library(dplyr))
+suppressMessages(attach(ames_train))
+rf= randomForest(log(price) ~ . -PID,data=ames_train_new,
+                            mtry=3, importance =TRUE)
+varImpPlot(rf,main="Figure 3.Important Variables Selection",scale = T)
+```
+
+##1.5 The Influence of Neighborhood on Price
+```{r}
+suppressMessages(library(ggplot2))
+ggplot(data = ames_train, aes(x = Neighborhood, y = price)) +
+  geom_boxplot(data = ames_train, aes(fill = Neighborhood), alpha = 0.5) + 
+  guides(fill = FALSE)+
+  theme_grey() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  theme(axis.title=element_text(size=16,face="bold"),
+        axis.text = element_text(size=12),
+        plot.title = element_text(size=20,face="bold", hjust = 0.5),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14, face = "bold"))
+```
+
+#2. Development and assessment of an initial model from Part I (10 points)
+
+##2.1 Initial model: must include a summary table and an explanation/discussion for variable selection. Interpretation of coefficients desirable for full points.
+
+### Summary Table
+
+```{r}
+model1 = lm(log(price) ~ Neighborhood  + Exter.Qual+ 
+    Heating + Central.Air + Bedroom.AbvGr + Functional + Garage.Cars + 
+    Paved.Drive + Wood.Deck.SF + House.Style + MS.SubClass +
+    log(Year.Built) + sqrt(Lot.Area) + log(Year.Remod.Add) + Overall.Qual + 
+    Bsmt.Exposure + BsmtFin.Type.1 + Overall.Cond + 
+    log(TotalSq), data=ames_train)
+s1 = summary(model1)
+s1
+```
+
+- In the summary table, 30 variables are included in model 1 and all of them are significant. The adjusted R square of model 1 is `r s1$adj.r.squared`.
+
+- In order to alleviate nonlinearity and heterogeneity problem, we take logarithm on price, Garage.Yr.Blt, and Year.Remod.Add, Year.Built, and area.
+
+### Coefficient Interpretation
+- There are 19 predictors in this model, while most of them are statistically significant. This means the true `price` of a house is influenced by many factors. Variance in one of these predictors may cause variance in house price. 
+
+- We here take variable `log(TotalSq)` as an example for interpretation. The value of coefficient `log(TotalSq)` is `r s1$coefficients['log(TotalSq)',1]`, which means one unit increasing in `TotalSq` from A to (A + 1) will result in increasing of `price` to (A+1)/A times larger.
+
+##2.2 Model selection: must include a discussion
+
+### Model/Variable Selection
+
+```{r}
+rf.var = data.frame(rf$importance)
+rf.var$variable = rownames(rf.var)
+rf.var = rf.var %>%
+  arrange(desc(X.IncMSE))
+```
+
+- From Part I, we got 30 most important variables in term of MSE by RandomForest. The 30 variables are `r rf.var[1:30, 3]`
+
+- Start with the 30 variables, we used this as our full model, and then used AIC stepwise to conduct variable selection.
+
+- We also used our intuition and common knowledge to select variables which might be correlated to price. 
+
+- Then we used correlation plot to identify those variables which have strong correlation with each other and just kept one of them.
+
+##2.3 Residual: must include a residual plot and a discussion
+
+```{r, warning = FALSE}
+par(mfrow=c(2,2))
+plot(model1)
+```
+
+- According to diagnostic plots, model 1 may not have seriously nonliearity and heterogeneity. 
+
+- We do not identify any possible influential outliers whose cook's distance larger than 1 in this model.
+
+- There is a slightly left heavy tail in the Normality Plot, which indicates there may be some outliers in the data.
+
+##2.4 RMSE: must include an RMSE and an explanation  (other criteria desirable)
+
+```{r predict-model1, echo=FALSE}
+Yhat_outsample1 = exp(predict(model1, newdata=ames_test, interval = "pred"))
+Yhat_insample1 = exp(predict(model1, newdata=ames_train, interval = "pred"))
+
+# name dataframe as predictions! DO NOT CHANGE
+predictions = as.data.frame(Yhat_outsample1)
+predictions$PID = ames_test$PID
+save(predictions, file="predict.Rdata")
+
+bias = function(y_hat, y_true){
+  mean(y_hat[,1] - y_true)
+}
+bias_outsample1 = bias(Yhat_outsample1, ames_test$price)
+bias_insample1 = bias(Yhat_insample1, ames_train$price)
+
+rtsqrerr = function(y_hat, y_true){
+  mean((y_hat[,1] - y_true)^2)^0.5
+}
+rmse_outsample1 = round(rtsqrerr(Yhat_outsample1, ames_test$price),1)
+rmse_insample1 = round(rtsqrerr(Yhat_insample1, ames_train$price),1)
+
+coverage = function(y_hat, y_true){
+  sum(y_true <= y_hat[,3] & y_true >= y_hat[,2])/length(y_true)
+}
+coverage_outsample1 = coverage(Yhat_outsample1, ames_test$price)
+coverage_insample1 = coverage(Yhat_insample1, ames_train$price)
+
+meanabsdev = function(y_hat, y_true){
+  mean(abs(y_hat[,1] - y_true))
+}
+meanabsdev_outsample1 = meanabsdev(Yhat_outsample1, ames_test$price)
+meanabsdev_insample1 = meanabsdev(Yhat_insample1, ames_train$price)
+
+maxdev = function(y_hat, y_true){
+  max(abs(y_hat[,1] - y_true))
+}
+maxdev_outsample1 = maxdev(Yhat_outsample1, ames_test$price)
+maxdev_insample1 = maxdev(Yhat_insample1, ames_train$price)
+
+initial_table = data.frame(outsample = c(rmse_outsample1, bias_outsample1, coverage_outsample1, 
+                                         meanabsdev_outsample1, maxdev_outsample1), 
+                           insample = c(rmse_insample1, bias_insample1, coverage_insample1,
+                                        meanabsdev_insample1, maxdev_insample1)) %>% 
+  `rownames<-` (c("RMSE","Bias","Coverage", "MeanAbsoluteDeviation", "MaximumDeviation"))
+initial_table
+```
+
+- The out of sample RMSE is $`r rmse_outsample1`$, bias is $`r bias_outsample1`$ and the coverage is $`r coverage_outsample1`$. Notice that the in sample RMSE is $`r rmse_insample1`$, which is smaller than out of sample RMSE. The large RMSE implies that the out of sample prediction of model 1 may not be good. But the bias of prediction is relatively small, which is $`r bias_insample1`$. Small bias and large out of sample predicted variance follow the bias-variance trade off property.
+
+##2.5 Model testing: must include an explanation
+
+### Model Check for the training data
+
+$$
+\log{price} = -47.026 + 0.017*NeighborhoodBrkSide -0.111 * Exter.QualTA \\
++ 0.122*HeatingGasA + 0.073*Central.AirY \\
+- 0.012*Bedroom.AbvGr + 0.064*FunctionalTyp + 0.041*Garage.Cars \\
++ 0.036*Paved.DriveN + 0.000*Wood.Deck.SF + 0.054*House.Style1.5Fin \\
+-0.048*MS.SubClass70 + 5.477*\log{Year.Built} + 0.001*\sqrt{Lot.Area}\\
++ 1.645*\log(Year.Remod.Add) + 0.056*Overall.Qual \\
++ 0.048*Bsmt.ExposureNo Basement - 0.074*BsmtFin.Type.1No Basement \\
++ 0.037*Overall.Cond + 0.555*\log{TotalSq}
+$$
+$$
+\hat{\log}{price} = -47.026 + 0.073*1 -0.111 * 1 + 0.122*1 + 0.073*1 \\
+- 0.012*3 + 0.064*1+ 0.041*1 + 0.000*1 \\
++ 0.000*244 + 0.000*1 -0.048*20 + 5.477*7.565 + 0.001*70.427\\
++ 1.645*7.592 + 0.056*5 + 0.062*1 - 0.074*1 + 0.037*7 + 0.555*7.411 \\
+= 11.819
+$$
+
+$$\hat{price} = \exp{(11.819)} = 135796.461$$
+
+$$price = 137000$$
+
+
+### Model Check for the testing data
+
+$$
+\log{price} = -47.026 + 0.017*NeighborhoodNAmes -0.111 * Exter.QualTA \\
++ 0.122*HeatingGasA + 0.073*Central.AirY - 0.012*Bedroom.AbvGr + 0.064*FunctionalTyp +\\
+0.041*Garage.Cars + 0.036*Paved.DriveY + 0.000*Wood.Deck.SF + 0.054*House.Style1STORY\\
++ 0.000*MS.SubClass20 + 5.477*\log{Year.Built} + 0.001*\sqrt{Lot.Area}\\
++ 1.645*\log(Year.Remod.Add) + 0.056*Overall.Qual \\
++ 0.048*Bsmt.ExposureNo - 0.074*BsmtFin.Type.1No Basement \\
++ 0.037*Overall.Cond + 0.555*\log{TotalSq}
+$$
+
+$$
+\log{\hat{price}} = -47.026 + 0.017*1 -0.111 * 1 \\
++ 0.122*1 + 0.073*1 - 0.012*3 + 0.064*1+ 0.041*2\\
++ 0.036*1 + 0.000*0 + 0.054*1 + 0.000*20 \\
++ 5.477*7.585 + 0.001*108.291+ 1.645*7.585 \\
++ 0.056*7 + 0.048*1 - 0.074*1 + 0.037*6\\
++ 0.555*7.523 = 12.20
+$$
+
+$$\hat{price} = \exp{(12.20)} = 198910.63$$
+
+$$price = 192100$$
+
+- According to the manually model check of the first observation of training and testing data we conduct in this part,the prediction in model 1 performs well. 
+
+### ANOVA Test
+
+```{r}
+model0 = lm(log(price) ~ log(area) + MS.SubClass + 
+    Lot.Area + log(Year.Built) + 
+    log(Year.Remod.Add) + BsmtFin.SF.1 + BsmtFin.SF.2 + 
+    X1st.Flr.SF + X2nd.Flr.SF + Misc.Val + Yr.Sold, data=ames_train)
+anova(model1, model0)
+```
+
+- Here, we use ANOVA to test model 1. First, we run a model 0 including 11 randomly chose variables. From ANOVA test, the model 1 is significantly better than model 0.
+
+#3. Development of the final model (20 points)
+
+##3.1 Final model: must include a summary table
+
+- We used Negative Binomial Generalized Linear Model which uses a log link function. This choice is consistent with the log transformation on the response variable, 'price'. 
+
+- Also, we compared it with other regression models (omitted in the notebook) such as Random Forests, Decision Tree, Boosting and GAM. It performed better than those models as it produced a smaller RMSE. 
+
+- Here's a summary of our complex model.
+
+```{r}
+suppressMessages(library(MASS))
+model2 = glm.nb(price ~ Neighborhood + Utilities + Exter.Qual + Foundation + 
+    Heating + Central.Air + Bedroom.AbvGr + Functional + Garage.Cars + 
+    Paved.Drive + House.Style + MS.Zoning + factor(MS.SubClass) + 
+    log(Year.Built) + log(Lot.Area) + log(Year.Remod.Add) + Overall.Qual + 
+    Bsmt.Exposure + Bsmt.Qual + Overall.Cond + BsmtFin.Type.1 + 
+    sqrt(TotalSq) + TotalSq:Neighborhood + TotalSq:Overall.Cond + TotalSq:Exterior.1st, data = ames_train)
+summary(model2)
+```
+
+##3.2 Variables: must include an explanation
+
+- The procedure of variable selection is very similar to what we did in Part I. We used the variables chosen from Part I with some additional interaction terms.
+
+- For interactions, we found "Neighborhood", "Overall.Cond" and "Exterior.1st" had strong interaction effect on "TotalSq". The model comparison test (Chi-squared Test testing on deviance) confirms that the model with interaction is significant. 
+
+```{r}
+model.noInt = glm.nb(price ~ Neighborhood + Utilities + Exter.Qual + Foundation + Heating + Central.Air + Bedroom.AbvGr + Functional + Garage.Cars + Paved.Drive + House.Style + MS.Zoning + factor(MS.SubClass) + log(Year.Built) + log(Lot.Area) + log(Year.Remod.Add) + Overall.Qual + Bsmt.Exposure + Bsmt.Qual + Overall.Cond + BsmtFin.Type.1 + sqrt(TotalSq), data = ames_train)
+anova(model.noInt, model2, test = "Chisq")
+```
+
+##3.3 Variable selection/shrinkage: must use appropriate method and include an explanation
+
+ - We transformed some numeric variables according to the scatterplots. According to the scatter plots, a log transformation should be taken on "Year.Built", "Lot.Area" and "Year.Remod.Add" since they had exponential relationship with the response. And, a square root transformation was needed for "TotalSq" since it had a quadratic relationship with the response variable.
+ 
+```{r}
+par(mfrow = c(2,2))
+plot(ames_train$Year.Built, ames_train$price, xlab = "Year.Built", ylab = "price")
+plot(ames_train$Lot.Area, ames_train$price, xlab = "Lot.Area", ylab = "price")
+plot(ames_train$Year.Remod.Add, ames_train$price, xlab = "Year.Remod.Add", ylab = "price")
+plot(ames_train$TotalSq, ames_train$price, xlab = "TotalSq", ylab = "price")
+```
+
+#4. Assessment of the final model (25 points)
+
+##4.1 Residual: must include a residual plot and a discussion
+
+```{r message=FALSE, warning=FALSE}
+par(mfrow = c(2,2),oma=c(0,0,2,0))
+plot(model2)
+```
+
+- According to the residual plot, our residuals generated by the complex model is normally distributed with a mean of 0. Referring to the leverage plot, we found that all points are within 0.5 Cook's distance, which means there were no influential points.
+
+##4.2 RMSE: must include an RMSE and an explanation  (other criteria desirable)
+
+- The in-sample RMSE is 15672.84. Here's a table for bias, Maximum Deviation, Mean Absolute Deviation, RMSE and Coverage for in-sample testing.
+
+```{r in-sample test}
+
+glm.nb.pred_insample = predict(model2, newdata = ames_train, type = "response", se.fit = T)
+glm.nb.pred_outsample = predict(model2, newdata = ames_test, type = "response", se.fit = T)
+
+critical = qnorm(0.975)
+fit = glm.nb.pred_insample$fit
+upr = fit + critical * glm.nb.pred_insample$se.fit
+lwr = fit - critical * glm.nb.pred_insample$se.fit
+Yhat_insample2 = cbind(fit, lwr, upr)
+
+critical = qnorm(0.975)
+fit = glm.nb.pred_outsample$fit
+upr = fit + critical * glm.nb.pred_outsample$se.fit
+lwr = fit - critical * glm.nb.pred_outsample$se.fit
+Yhat_outsample2 = cbind(fit, lwr, upr)
+
+predictions = as.data.frame(Yhat_outsample2)
+predictions$PID = ames_test$PID
+save(predictions, file="predict.Rdata")
+
+data.frame(c(bias(Yhat_insample2, ames_train$price), maxdev(Yhat_insample2, ames_train$price),
+           meanabsdev(Yhat_insample2, ames_train$price), rtsqrerr(Yhat_insample2, ames_train$price),
+           coverage(Yhat_insample2, ames_train$price))) %>% 
+  `rownames<-` (c("Bias", "MaximumDeviation", "MeanAbsoluteDeviation", "RMSE", "Coverage")) %>%
+  `colnames<-` ("In Sample")
+```
+
+##4.3 Model evaluation: must include an evaluation discussion
+
+### F-Test
+- We used an F-test to test the variances of the two models. Our result showed that our complex model is significant. Thus, our complex model is better than the simple model in terms of prediction.
+
+```{r}
+var.test(model1, model2)
+```
+
+### True vs. Predicted
+
+- We can see that the true values and the predicted values cluster around y = x, which implies good predictions.
+
+```{r}
+plot(ames_test$price, Yhat_outsample2[,1], main = "True vs. Predicted", xlab = "True", ylab = "Predicted", pch = 19, col = "blue", cex = 0.2)
+abline(a = 0, b = 1)
+```
+
+### Dignostic Plot
+
+- Referring to the diagnostic plots in the 'Residual' part, we found that the residuals were normally distributed with mean 0.
+
+##4.4 Model testing : must include a discussion
+
+- The out-of-sample RMSE is 14460.25. Here's a table for bias, Maximum Deviation, Mean Absolute Deviation, RMSE and Coverage. As we can see, even though the Bias for the in-sample test is small, the Maximum Deviation, Mean Absolute Deviation, RMSE and Coverage is poorer, which doesn't imply possible overfitting. The reason that in-sample RMSE is larger may be due to the larger sample size of the training data where the prices are more scattered.
+
+```{r out-of-sample and in-sample test}
+data.frame(c(bias(Yhat_insample2, ames_train$price), maxdev(Yhat_insample2, ames_train$price),
+           meanabsdev(Yhat_insample2, ames_train$price), rtsqrerr(Yhat_insample2, ames_train$price),
+           coverage(Yhat_insample2, ames_train$price)),
+           c(bias(Yhat_outsample2, ames_test$price), maxdev(Yhat_outsample2, ames_test$price),
+           meanabsdev(Yhat_outsample2, ames_test$price), rtsqrerr(Yhat_outsample2, ames_test$price),
+           coverage(Yhat_outsample2, ames_test$price))) %>% 
+  `rownames<-` (c("Bias", "MaximumDeviation", "MeanAbsoluteDeviation", "RMSE", "Coverage")) %>%
+  `colnames<-` (c("In Sample", "Out of Sample"))
+```
+
+##4.5 Model result: must include a selection of the top 10 undervalued and overvalued houses
+
+- Top 10 Undervalued Houses
+
+```{r undervalued}
+suppressMessages(library(dplyr))
+price_diff = predict(model2, newdata=ames_train, type = "response", se.fit = T)$fit - ames_train$price
+ames_train.new = data.frame(ames_train, price_diff = price_diff)
+undervalue = ames_train.new %>% 
+  arrange(desc(price_diff)) %>%
+  mutate(return.rate = price_diff/price) %>%
+  select_("PID", "area", "price", "price_diff", "return.rate", "Neighborhood")
+```
+
+Top 10 undervalued houses in unit of absolute difference of dollars
+
+```{r}
+undervalue.abs = undervalue %>% slice(1:10) %>% select_(-5); undervalue.abs
+```
+
+Top 10 undervalued houses in unit of return rate, which is the gain per dollar investment
+
+```{r}
+undervalue.return = undervalue %>% arrange(desc(return.rate)) %>% slice(1:10) %>% select_(-4) ; undervalue.return
+```
+
+```{r overvalued}
+overvalued = ames_train.new %>% 
+  mutate(return.rate = price_diff/price) %>%
+  arrange(price_diff) %>%
+  select_("PID", "area", "price", "price_diff", "return.rate", "Neighborhood")
+```
+
+- Top 10 Overvalued Houses in unit of absolute difference of dollars
+
+```{r}
+overvalued %>% slice(1:10) %>% select_(-5)
+```
+
+Top 10 undervalued houses in unit of return rate, which is the loss per dollar investment
+
+```{r}
+overvalued %>% arrange(return.rate) %>% slice(1:10) %>% select_(-4)
+
+```
+
+#5. Conclusion (10 points): must include a summary of results and a discussion of things learned
+
+##5.1 Summary of Results
+
+- Based on the diagonsis and analysis aboved, we see that the complex model, which is the negavtive binormial generalized linear model, outperforms the simple model, the linear model in various ways: maximum deviation, mean absolute deviation, and RMSE. Despite the fact that the complex model's coverage is relatively small and its bias is slightly bigger, which is due to the nature of non-linear model, the overall performance of the complex model is still superior, compared to the simple model. Besides, through model evaluation and testing, the predicted values generated by the complex model aligns well with the true values, in both in-sample testing and out-of-sample testing. In conclusion, we can summarize that our complex model, the negavtive binormial generalized linear model, is a relatively appropriate model, through which we can predict real estate values in future datasets, identify the undervalued ones, and therefore determine whether to purchase them or not.
+
+##5.2 Things Learned
+
+- We can't only rely on computer to help us make decision on variables selections, because sometimes it may ignore those variables which are quite important with real-world meaning, and which should be included into our model based on our intuition.
+
+- As the data analysis indicates that the feature "Neighborhood" is quite significant and therefore plays a huge role in the prediction, this result aligns with our common sense about the real estate: location is the key to price.
+
+- Both simple and complex models show that the area of the house is important in predicting price. The result is consistent with our common sense that larger houses have higher prices.
+
+- To evaluate a model, we should not just focus on reducing RMSE. Coverage rate, prediction bias and other criteria matters. Considering the variance-bias trade off, small RMSE could follow with high prediction.
+
+- Suprisingly, the year when the house was built is quite influential to price, since it has a large coefficient and a small p-value. Larger year number results in higher price, which means newer houses are more popular and thus more expensive.
+
+##5.3 Business Insights
+
+### What Does the Profitable Houses Look Like?
+
+```{r}
+avg_gain_price = overvalued %>% filter(return.rate>0) %>% summarise(mean(price))
+avg_loss_price = overvalued %>% filter(return.rate<0) %>% summarise(mean(price))
+
+t.test((overvalued %>% filter(return.rate>0)%>%select_(3)), overvalued %>% filter(return.rate<0)%>%select_(3))
+
+avg_gain_area = overvalued %>% filter(return.rate>0) %>% summarise(mean(area))
+avg_loss_area = overvalued %>% filter(return.rate<0) %>% summarise(mean(area))
+
+t.test((overvalued %>% filter(return.rate>0)%>%select_(2)), overvalued %>% filter(return.rate<0)%>%select_(2))
+
+#plot gain v.s. price/area
+overvalued = overvalued %>% mutate(gain = factor(return.rate >= 0))
+levels(overvalued$gain) = c("Loss", "Gain")
+ggplot(data = overvalued, aes(x = gain, y = price, color = gain)) +
+  geom_boxplot(alpha = 0.5) + 
+  theme_grey() + 
+  theme(axis.title=element_text(size=16,face="bold"),
+        axis.text = element_text(size=12),
+        plot.title = element_text(size=20,face="bold", hjust = 0.5),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14, face = "bold"))
+ggplot(data = overvalued, aes(x = gain, y = area, color = gain)) +
+  geom_boxplot(alpha = 0.5)+
+  theme_grey() + 
+  theme(axis.title=element_text(size=16,face="bold"),
+        axis.text = element_text(size=12),
+        plot.title = element_text(size=20,face="bold", hjust = 0.5),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14, face = "bold"))
+```
+
+- By comparing the average price of houses which may help buyer gain money and houses which may result in loss, we have two useful findings which might instruct investment on house.
+
+- The average price for houses which generate gain is $`r avg_gain_price`$, while that for houses which result in loss is $`r avg_loss_price`$. By conducting t-test on these two groups, there was a statistically significant difference between these two.
+
+- The average area for houses which may result in gain is $`r avg_gain_area`$, while that for houses which may result in loss is $`r avg_loss_area`$. By conducting t-test on these two groups, there was no statistically significant difference between these two.
+
+- To conclude, we would better buy cheaper house if we want to invest some money on houses, given no other detailed information on houses. On the one hand, cheaper house could have more probability increasing its value in the future. On the other hand, considering the risk of losing their money in investment on house, put less money on one investment could reduce the possible loss in the future, which is a desire advantage of cheaper house, especially when investors are risk aversion.
+
+# Part IV
+Create predictions for the validation data from your final model and write out to a file `prediction-validation.Rdata`
+This should have the same format as the models in Part I and II. 10 points
+
+```{r, message=FALSE}
+load("ames_validation.Rdata")
+
+levels(ames_validation$Bsmt.Cond) = c(levels(ames_validation$Bsmt.Cond)[-1], "No Basement")
+ames_validation$Bsmt.Cond[is.na(ames_validation$Bsmt.Cond)] = "No Basement"
+levels(ames_validation$Bsmt.Exposure) = c(levels(ames_validation$Bsmt.Exposure)[-1], "No Basement")
+ames_validation$Bsmt.Exposure[is.na(ames_validation$Bsmt.Exposure)] = "No Basement"
+levels(ames_validation$Bsmt.Qual) = c(levels(ames_validation$Bsmt.Qual)[-1], "No Basement")
+ames_validation$Bsmt.Qual[is.na(ames_validation$Bsmt.Qual)] = "No Basement"
+ames_validation$Bsmt.Qual[ames_validation$Bsmt.Qual=="Ex"] = "Gd"
+levels(ames_validation$BsmtFin.Type.1) = c(levels(ames_validation$BsmtFin.Type.1)[-1], "No Basement")
+ames_validation$BsmtFin.Type.1[is.na(ames_validation$BsmtFin.Type.1)] = "No Basement"
+ames_validation$BsmtFin.Type.1[ames_validation$BsmtFin.Type.1=="ALQ"] = "Rec"
+levels(ames_validation$BsmtFin.Type.2) = c(levels(ames_validation$BsmtFin.Type.2)[-1], "No Basement")
+ames_validation$BsmtFin.Type.2[is.na(ames_validation$BsmtFin.Type.2)] = "No Basement"
+
+levels(ames_validation$Alley) = c(levels(ames_validation$Alley)[-1], "No alley access")
+ames_validation$Alley[is.na(ames_validation$Alley)] = "No alley access"
+levels(ames_validation$Fireplace.Qu) = c(levels(ames_validation$Fireplace.Qu)[-1], "No Fireplace")
+ames_validation$Fireplace.Qu[is.na(ames_validation$Fireplace.Qu)] = "No Fireplace"
+levels(ames_validation$Garage.Type) = c(levels(ames_validation$Garage.Type)[-1], "No Garage")
+ames_validation$Garage.Type[is.na(ames_validation$Garage.Type)] = "No Garage"
+levels(ames_validation$Garage.Finish) = c(levels(ames_validation$Garage.Finish)[-1], "No Garage")
+ames_validation$Garage.Finish[is.na(ames_validation$Garage.Finish)] = "No Garage"
+
+levels(ames_validation$Garage.Qual) = c("Po","Fa","TA","Gd","Ex", "No Garage")
+ames_validation$Garage.Qual[is.na(ames_validation$Garage.Qual)] = "No Garage"
+levels(ames_validation$Garage.Cond) = c(levels(ames_validation$Garage.Cond)[-1], "No Garage")
+ames_validation$Garage.Cond[is.na(ames_validation$Garage.Cond)] = "No Garage"
+levels(ames_validation$Pool.QC) = c(levels(ames_validation$Pool.QC)[-1], "No Pool")
+ames_validation$Pool.QC[is.na(ames_validation$Pool.QC)] = "No Pool"
+
+levels(ames_validation$Fence) = c(levels(ames_validation$Fence)[-1], "No Fence")
+ames_validation$Fence[is.na(ames_validation$Fence)] = "No Fence"
+levels(ames_validation$Misc.Feature) = c("None", levels(ames_validation$Misc.Feature)[-1])
+ames_validation$Misc.Feature[is.na(ames_validation$Misc.Feature)] = "None"
+
+levels(ames_validation$Garage.Yr.Blt) = c(levels(ames_validation$Garage.Yr.Blt)[-1], "No Garage Year")
+ames_validation$Garage.Yr.Blt[is.na(ames_validation$Garage.Yr.Blt)] = mean(ames_validation$Garage.Yr.Blt[!is.na(ames_validation$Garage.Yr.Blt)])
+
+ames_validation = ames_validation %>%
+  mutate(MS.SubClass = as.factor(MS.SubClass))
+```
+
+```{r}
+ames_validation$price = predict(model2, newdata=ames_validation, type = "response", se.fit = T)$fit
+predictions = ames_validation
+predictions$PID = ames_validation$PID
+predictions %>% select_("PID", "price")
+save(predictions, file="prediction-validation.Rdata")
+```
+
+### Class Presentations
+
+Each Group should prepare 5 slides in their Github repo:  (save as slides.pdf)
+
+* Most interesting graphic  (a picture is worth a thousand words prize!)  
+
+* Best Model (motivation, how you found it, why you think it is best)
+
+* Best Insights into predicting Sales Price.
+
+* 2 Best Houses to purchase  (and why)
+
+* Best Team Name/Graphic
+
+We will select winners based on the above criteria and overall performance.
+
+
+Finally your repo should have: `writeup.Rmd`, `writeup.pdf`, `slides.Rmd` (and whatever output you use for the presentation) and `predict.Rdata` and `predict-validation.Rdata`.
